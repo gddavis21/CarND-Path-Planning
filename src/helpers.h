@@ -209,9 +209,10 @@ typedef std::vector<HwyCoord> HwyTrajectory;
 
 struct RoadParameters 
 {
-    double WrapAroundPosition;
     size_t LaneCount;
-    size_t LaneWidth;
+    double LaneWidth;
+    double WrapAroundPosition;
+    double SpeedLimit;
 
     size_t WhichLane(double d) const
     {
@@ -223,7 +224,8 @@ struct DrivingParameters
 {
     double AccelerationLimit;
     double JerkLimit;
-    double SpeedLimit;
+    double TrailBufferTime;
+    double SpeedLimitBuffer;
 };
 
 struct Kinematics 

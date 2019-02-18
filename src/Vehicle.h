@@ -2,9 +2,13 @@
 #define OTHER_VEHICLE_H
 
 #include "helpers.h"
+#include <memory>
 #include <array>
 #include <vector>
 #include <unordered_map>
+
+class Vehicle;
+typedef std::shared_ptr<Vehicle> VehiclePtr;
 
 class Vehicle
 {
@@ -20,28 +24,34 @@ public:
     double GetLateralPosition() const;
     size_t GetLane() const;
 
-    std::vector<Vehicle> GeneratePredictions(unsigned int horizon);
+    VehiclePtr Predict(double dt) const;
 
-private:
+    // how far behind other vehicle am I?
+    double DistanceAhead(const Vehicle &other) const;
+    double DistanceBehind(const Vehicle &other) const;
+
+protected:
     RoadParameters _roadParams;
     Kinematics _longKinematics;
     double _lateralPos;
 };
 
-typedef std::unordered_map<size_t, std::vector<Vehicle>> VehiclePredictions;
-typedef std::array<Vehicle, 2> VehicleTrajectory;
+typedef std::array<VehiclePtr, 2> VehicleTrajectory;
+typedef std::unordered_map<size_t, VehicleTrajectory> VehiclePredictions;
 
 class EgoVehicle : public Vehicle 
 {
 public:
     EgoVehicle(
-        RoadParameters roadParams, 
         DrivingParameters drivingParams, 
+        RoadParameters roadParams, 
         Kinematics longKinematics, 
         double lateralPos);
 
-    void UpdateState(Kinematics longKinematics, double lateralPos);
-    VehicleTrajectory GenerateNextTrajectory(const VehiclePredictions&);
+    //void UpdateState(Kinematics longKinematics, double lateralPos);
+    //VehicleTrajectory GenerateNextTrajectory(const VehiclePredictions&);
+
+    VehicleTrajectory PlanBehavior(const VehiclePredictions&, double dt);
 
 private:
     enum Behavior 
@@ -53,22 +63,27 @@ private:
         LaneChangeRight
     };
 
-    enum LaneChangeDirection { Left, Right };
+    std::vector<Behavior> SuccessorBehaviors() const;
+    VehiclePtr GenerateTrajectory(Behavior, const VehiclePredictions&, double dt) const;
 
-    std::vector<Behavior> SuccessorStates() const;
+    VehiclePtr ConstantSpeedTrajectory(const VehiclePredictions&, double dt) const;
+    VehiclePtr KeepLaneTrajectory(const VehiclePredictions&, double dt) const;
+    VehiclePtr PrepareLaneChangeTrajectory(bool left, const VehiclePredictions&, double dt) const;
+    VehiclePtr LaneChangeTrajectory(bool left, const VehiclePredictions&, double dt) const;
 
-    bool CreateConstantSpeedTrajectory(const VehiclePredictions&, VehicleTrajectory&) const;
-    bool CreateKeepLaneTrajectory(const VehiclePredictions&, VehicleTrajectory&) const;
+    Kinematics GetKinematicsForLane(size_t lane, const VehiclePredictions&, double dt) const;
+    VehiclePtr GetNearestVehicleInLane(size_t lane, bool lookAhead, const VehiclePredictions&) const;
 
-    bool CreatePrepareLaneChangeTrajectory(
-        LaneChangeDirection direction,
-        const VehiclePredictions &predictions,
-        VehicleTrajectory &trajectory) const;
+    bool TryGetVehicleAhead(const VehiclePredictions&, size_t lane, size_t &ID) const;
+    bool TryGetVehicleBehind(const VehiclePredictions&, size_t lane, size_t &ID) const;
 
-    bool CreateLaneChangeTrajectory(
-        LaneChangeDirection direction,
-        const VehiclePredictions &predictions,
-        VehicleTrajectory &trajectory) const;
+    bool TryGetNearestVehicle(
+        const VehiclePredictions&,
+        bool lookAhead,
+        size_t lane,
+        size_t &ID) const;
+
+    double TrajectoryCost(const VehicleTrajectory&, const VehiclePredictions&) const;
 
     DrivingParameters _drivingParams;
     Behavior _currentBehavior;
