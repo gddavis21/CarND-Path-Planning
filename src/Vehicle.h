@@ -1,116 +1,208 @@
-#ifndef OTHER_VEHICLE_H
-#define OTHER_VEHICLE_H
+#ifndef __VEHICLE_H__
+#define __VEHICLE_H__
 
 #include "helpers.h"
-#include <memory>
-#include <array>
-#include <vector>
-#include <unordered_map>
+#include "Highway.h"
+// #include <memory>
+// #include <array>
+// #include <vector>
+// #include <unordered_map>
 
-class Vehicle;
-typedef std::shared_ptr<Vehicle> VehiclePtr;
+// class Vehicle;
+// typedef std::shared_ptr<Vehicle> VehiclePtr;
 
 class Vehicle
 {
 public:
-    Vehicle(RoadParameters roadParams, Kinematics longKinematics, double lateralPos);
+    Vehicle(
+        const HighwayParameters &hwyParams, 
+        const Kinematics &longKinematics, 
+        double lateralPos, 
+        double time);
 
-    Kinematics GetLongitudinalKinematics() const;
+    Vehicle();
 
-    double GetLongitudinalPosition() const;
-    double GetLongitudinalVelocity() const;
-    double GetLongitudinalAcceleration() const;
+    bool IsValid() const;
+    double Time() const;
 
-    double GetLateralPosition() const;
-    size_t GetLane() const;
+    Kinematics GetKinematics() const;
 
-    VehiclePtr Predict(double dt) const;
+    double Position() const;
+    double Velocity() const;
+    double Acceleration() const;
 
-    // how far behind other vehicle am I?
-    double DistanceAhead(const Vehicle &other) const;
+    double LateralPosition() const;
+    size_t Lane() const;
+
+    Vehicle Predict(double dt) const;
+
+    // how far behind other vehicle am I? (normalized for track wrap-around)
     double DistanceBehind(const Vehicle &other) const;
 
 protected:
-    RoadParameters _roadParams;
+    bool _valid;
+    HighwayParameters _hwyParams;
     Kinematics _longKinematics;
     double _lateralPos;
+    double _time;
 };
 
-typedef std::array<VehiclePtr, 2> VehicleTrajectory;
-typedef std::unordered_map<size_t, VehicleTrajectory> VehiclePredictions;
+// typedef std::array<Vehicle, 2> VehicleTrajectory;
+// typedef std::unordered_map<size_t, VehicleTrajectory> VehiclePredictions;
 
-class EgoVehicle : public Vehicle 
-{
-public:
-    EgoVehicle(
-        DrivingParameters drivingParams, 
-        RoadParameters roadParams, 
-        Kinematics longKinematics, 
-        double lateralPos);
+// struct DrivingParameters
+// {
+//     double AccelerationLimit;
+//     double JerkLimit;
+//     double FollowBuffer;
+//     double SpeedLimitBuffer;
+//     double StopCost;
+// };
 
-    //void UpdateState(Kinematics longKinematics, double lateralPos);
-    //VehicleTrajectory GenerateNextTrajectory(const VehiclePredictions&);
+// class EgoVehicle
+// {
+// public:
+//     EgoVehicle(HighwayParameters hwyParams, DrivingParameters drivingParams);
 
-    VehicleTrajectory PlanBehavior(const VehiclePredictions&, double dt);
+//     //void UpdateState(Kinematics longKinematics, double lateralPos);
+//     //VehicleTrajectory GenerateNextTrajectory(const VehiclePredictions&);
 
-private:
-    enum Behavior 
-    {
-        KeepLane,
-        PrepareLaneChangeLeft,
-        PrepareLaneChangeRight,
-        LaneChangeLeft,
-        LaneChangeRight
-    };
+//     bool IsChangingLanes() const;
 
-    std::vector<Behavior> SuccessorBehaviors() const;
-    VehiclePtr GenerateTrajectory(Behavior, const VehiclePredictions&, double dt) const;
+//     // void Update(
+//     //     const VehiclePredictions&, 
+//     //     const Vehicle &egoStart,
+//     //     Vehicle &egoFinish,
+//     //     double &trajTime);
+//     Vehicle Update(const Vehicle &self, const std::vector<Vehicle> &others);
 
-    VehiclePtr ConstantSpeedTrajectory(const VehiclePredictions&, double dt) const;
-    VehiclePtr KeepLaneTrajectory(const VehiclePredictions&, double dt) const;
-    VehiclePtr PrepareLaneChangeTrajectory(bool left, const VehiclePredictions&, double dt) const;
-    VehiclePtr LaneChangeTrajectory(bool left, const VehiclePredictions&, double dt) const;
+// private:
+//     enum Behavior 
+//     {
+//         KeepLane,
+//         PrepareLaneChangeLeft,
+//         PrepareLaneChangeRight,
+//         LaneChangeLeft,
+//         LaneChangeRight
+//     };
 
-    Kinematics GetKinematicsForLane(size_t lane, const VehiclePredictions&, double dt) const;
-    VehiclePtr GetNearestVehicleInLane(size_t lane, bool lookAhead, const VehiclePredictions&) const;
+//     std::vector<Behavior> SuccessorBehaviors() const;
+//     //Vehicle GenerateTrajectory(Behavior, const VehiclePredictions&, double dt) const;
+//     Vehicle GenerateTrajectory(
+//         const Vehicle &self, 
+//         const std::vector<Vehicle> &others, 
+//         Behavior) const;
 
-    bool TryGetVehicleAhead(const VehiclePredictions&, size_t lane, size_t &ID) const;
-    bool TryGetVehicleBehind(const VehiclePredictions&, size_t lane, size_t &ID) const;
+//     // Vehicle ConstantSpeedTrajectory(const VehiclePredictions&, double dt) const;
+//     // Vehicle KeepLaneTrajectory(const VehiclePredictions&, double dt) const;
+//     // Vehicle PrepareLaneChangeTrajectory(bool left, const VehiclePredictions&, double dt) const;
+//     // Vehicle LaneChangeTrajectory(bool left, const VehiclePredictions&, double dt) const;
+//     Vehicle KeepLaneTrajectory(
+//         const Vehicle &self, 
+//         const std::vector<Vehicle> &others) const;
+    
+//     Vehicle PrepareLaneChangeTrajectory(
+//         const Vehicle &self, 
+//         const std::vector<Vehicle> &others, 
+//         bool moveLeft) const;
 
-    bool TryGetNearestVehicle(
-        const VehiclePredictions&,
-        bool lookAhead,
-        size_t lane,
-        size_t &ID) const;
+//     Vehicle LaneChangeTrajectory(
+//         const Vehicle &self, 
+//         const std::vector<Vehicle> &others, 
+//         bool moveLeft) const;
 
-    double TrajectoryCost(const VehicleTrajectory&, const VehiclePredictions&) const;
+//     //Kinematics GetKinematicsForLane(const VehiclePredictions&, size_t lane, double dt) const;
+//     Kinematics GetLaneKinematics(
+//         const Vehicle &self, 
+//         const std::vector<Vehicle> &others, 
+//         size_t lane, 
+//         double dt) const;
+//     //Vehicle GetNearestVehicleInLane(size_t lane, bool lookAhead, const VehiclePredictions&) const;
 
-    DrivingParameters _drivingParams;
-    Behavior _currentBehavior;
-};
+//     // bool TryGetVehicleAhead(
+//     //     const VehiclePredictions&, 
+//     //     const Vehicle &self,
+//     //     size_t lane, 
+//     //     size_t &ID) const;
 
-inline Kinematics Vehicle::GetLongKinematics() const {
+//     // bool TryGetVehicleBehind(
+//     //     const VehiclePredictions&, 
+//     //     const Vehicle &self,
+//     //     size_t lane, 
+//     //     size_t &ID) const;
+
+//     // bool TryGetNearestVehicle(
+//     //     const VehiclePredictions&,
+//     //     const Vehicle &self,
+//     //     bool lookAhead,
+//     //     size_t lane,
+//     //     size_t &ID) const;
+
+//     bool TryGetVehicleAhead(
+//         const Vehicle &self, 
+//         const std::vector<Vehicle> &others, 
+//         size_t lane, 
+//         size_t &indexAhead,
+//         double &timeAhead) const;
+
+//     bool TryGetVehicleBehind(
+//         const Vehicle &self, 
+//         const std::vector<Vehicle> &others, 
+//         size_t lane, 
+//         size_t &indexBehind,
+//         double &timeBehind) const;
+
+//     bool TryGetNearestVehicle(
+//         const Vehicle &self, 
+//         const std::vector<Vehicle> &others, 
+//         size_t lane, 
+//         bool lookAhead, 
+//         size_t &vehicleIndex) const;
+
+//     //double TrajectoryCost(const VehicleTrajectory&, const VehiclePredictions&) const;
+//     //double EfficiencyCost(double velocity) const;
+//     double TrajectoryCost(
+//         const Vehicle &self,
+//         const Vehicle &next,
+//         const std::vector<Vehicle> &others,
+//         Behavior) const;
+
+//     double SpeedCost(double speed) const;
+
+//     DrivingParameters _drivingParams;
+//     Behavior _currentBehavior;
+// };
+
+inline bool Vehicle::IsValid() const {
+    return _valid;
+}
+
+inline double Vehicle::Time() const {
+    return _time;
+}
+
+inline Kinematics Vehicle::GetKinematics() const {
     return _longKinematics;
 }
 
-inline double Vehicle::GetLongitudinalPosition() const {
+inline double Vehicle::Position() const {
     return _longKinematics.position;
 }
 
-inline double Vehicle::GetLongitudinalVelocity() const {
+inline double Vehicle::Velocity() const {
     return _longKinematics.velocity;
 }
 
-inline double Vehicle::GetLongitudinalAcceleration() const {
+inline double Vehicle::Acceleration() const {
     return _longKinematics.acceleration;
 }
 
-inline double Vehicle::GetLateralPosition() const {
+inline double Vehicle::LateralPosition() const {
     return _lateralPos;
 }
 
-inline size_t Vehicle::GetLane() const {
-    return _roadParams.WhichLane(_lateralPos);
+inline size_t Vehicle::Lane() const {
+    return _hwyParams.WhichLane(_lateralPos);
 }
 
-#endif // OTHER_VEHICLE_H
+#endif // __VEHICLE_H__
