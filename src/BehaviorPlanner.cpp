@@ -21,6 +21,20 @@ BehaviorPlanner::Behavior BehaviorPlanner::CurrentBehavior() const {
     return _currentBehavior;
 }
 
+size_t BehaviorPlanner::GetLane(const Vehicle &veh) const {
+    return _highwayParams.WhichLane(veh.LateralPosition());
+}
+
+double BehaviorPlanner::LaneCenter(size_t lane) const {
+    return lane*_highwayParams.LaneWidth + _highwayParams.LaneWidth/2;
+}
+
+double BehaviorPlanner::DistanceBehind(const Vehicle &behind, const Vehicle &ahead) const
+{
+    double dist = ahead.Position() - behind.Position();
+    return (dist < 0.0) ? (dist + _highwayParams.WrapAroundPosition) : dist;
+}
+
 bool BehaviorPlanner::IsChangingLanes() const 
 {
     return _currentBehavior == LaneChangeLeft || _currentBehavior == LaneChangeRight;
@@ -76,37 +90,37 @@ string BehaviorPlanner::BehaviorLabel(Behavior behavior)
 //     return egoNext;
 // }
 
-Vehicle BehaviorPlanner::Update(const Vehicle &ego, const vector<Vehicle> &others)
+BehaviorPlanner::Trajectory BehaviorPlanner::Update(const Vehicle &ego, const vector<Vehicle> &others)
 {
-    double minCost = numeric_limits<double>::max();
-    Behavior bestBehavior = KeepLane;
-    Vehicle bestTrajectory;
+    double min_cost = numeric_limits<double>::max();
+    Behavior best_behavior = KeepLane;
+    Trajectory best_trajectory;
 
     for (Behavior behavior: SuccessorBehaviors(ego))
     {
-        Vehicle traj = GenerateTrajectory(ego, others, behavior);
+        Trajectory traj = GenerateTrajectory(ego, others, behavior);
 
-        if (traj.IsValid())
+        if (traj.is_valid)
         {
-            double cost = TrajectoryCost(ego, traj, others, behavior);
+            double cost = TrajectoryCost(ego, others, behavior, traj);
 
-            if (cost < minCost)
+            if (cost < min_cost)
             {
-                bestBehavior = behavior;
-                bestTrajectory = traj;
-                minCost = cost;
+                best_behavior = behavior;
+                best_trajectory = traj;
+                min_cost = cost;
             }
         }
     }
 
-    _currentBehavior = bestBehavior;
-    return bestTrajectory;
+    _currentBehavior = best_behavior;
+    return best_trajectory;
 }
 
 vector<BehaviorPlanner::Behavior> BehaviorPlanner::SuccessorBehaviors(const Vehicle &ego) const
 {
-    bool inLeftLane = (ego.Lane() == 0);
-    bool inRightLane = (ego.Lane() == _highwayParams.LaneCount - 1);
+    bool inLeftLane = (GetLane(ego) == 0);
+    bool inRightLane = (GetLane(ego) == _highwayParams.LaneCount - 1);
 
     vector<Behavior> successors;
 
@@ -164,7 +178,7 @@ vector<BehaviorPlanner::Behavior> BehaviorPlanner::SuccessorBehaviors(const Vehi
 //     return Vehicle();
 // }
 
-Vehicle BehaviorPlanner::GenerateTrajectory(
+BehaviorPlanner::Trajectory BehaviorPlanner::GenerateTrajectory(
     const Vehicle &ego,
     const vector<Vehicle> &others,
     Behavior behavior) const
@@ -181,7 +195,7 @@ Vehicle BehaviorPlanner::GenerateTrajectory(
         case LaneChangeRight:         return LaneChangeTrajectory(ego, others, RIGHT);
     }
     
-    return Vehicle();
+    return Trajectory { .is_valid = false };
 }
 
 // Vehicle EgoVehicle::ConstantSpeedTrajectory(
@@ -199,13 +213,24 @@ Vehicle BehaviorPlanner::GenerateTrajectory(
 //     return Vehicle(_highwayParams, nextKin, ego.GetLateralPosition(), ego.GetTime() + 1.0);
 // }
 
-Vehicle BehaviorPlanner::KeepLaneTrajectory(const Vehicle &ego, const vector<Vehicle> &others) const
+// Vehicle BehaviorPlanner::KeepLaneTrajectory(const Vehicle &ego, const vector<Vehicle> &others) const
+// {
+//     return Vehicle(
+//         _highwayParams, 
+//         GetLaneKinematics(ego, others, ego.Lane(), timeStep), 
+//         ego.LaneCenter(), 
+//         ego.Time() + timeStep);
+// }
+
+BehaviorPlanner::Trajectory BehaviorPlanner::KeepLaneTrajectory(
+    const Vehicle &ego, 
+    const vector<Vehicle> &others) const
 {
-    return Vehicle(
-        _highwayParams, 
-        GetLaneKinematics(ego, others, ego.Lane(), timeStep), 
-        ego.LateralPosition(), 
-        ego.Time() + timeStep);
+    return {
+        .is_valid = true,
+        .goal_velocity = GetLaneVelocity(ego, others, GetLane(ego)),
+        .goal_lateral_position = LaneCenter(GetLane(ego))
+    };
 }
 
 // Vehicle EgoVehicle::PrepareLaneChangeTrajectory(
@@ -235,30 +260,56 @@ Vehicle BehaviorPlanner::KeepLaneTrajectory(const Vehicle &ego, const vector<Veh
 //     return Vehicle(_highwayParams, nextKin, ego.GetLateralPosition(), ego.GetTime() + 1.0);
 // }
 
-Vehicle BehaviorPlanner::PrepareLaneChangeTrajectory(
+// Vehicle BehaviorPlanner::PrepareLaneChangeTrajectory(
+//     const Vehicle &ego,
+//     const vector<Vehicle> &others,
+//     bool moveLeft) const
+// {
+//     size_t currentLane = ego.Lane();
+//     size_t targetLane = moveLeft ? (currentLane - 1) : (currentLane + 1);
+
+//     Kinematics currentLaneKinematics = GetLaneKinematics(ego, others, currentLane, timeStep);
+//     Kinematics targetLaneKinematics = GetLaneKinematics(ego, others, targetLane, timeStep);
+//     bool slowToTarget = false;
+
+//     if (targetLaneKinematics.velocity < currentLaneKinematics.velocity)
+//     {
+//         size_t indexBehind;
+//         double timeBehind;
+//         slowToTarget = TryGetVehicleBehind(ego, others, currentLane, indexBehind, timeBehind) && (timeBehind > 3);
+//     }
+
+//     return Vehicle(
+//         _highwayParams,
+//         slowToTarget ? targetLaneKinematics : currentLaneKinematics,
+//         ego.LaneCenter(),
+//         ego.Time() + timeStep);
+// }
+
+BehaviorPlanner::Trajectory BehaviorPlanner::PrepareLaneChangeTrajectory(
     const Vehicle &ego,
     const vector<Vehicle> &others,
-    bool moveLeft) const
+    bool change_left) const
 {
-    size_t currentLane = ego.Lane();
-    size_t targetLane = moveLeft ? (currentLane - 1) : (currentLane + 1);
+    size_t current_lane = GetLane(ego);
+    size_t target_lane = change_left ? (current_lane - 1) : (current_lane + 1);
 
-    Kinematics currentLaneKinematics = GetLaneKinematics(ego, others, currentLane, timeStep);
-    Kinematics targetLaneKinematics = GetLaneKinematics(ego, others, targetLane, timeStep);
-    bool slowToTarget = false;
+    double current_lane_velocity = GetLaneVelocity(ego, others, current_lane);
+    double target_lane_velocity = GetLaneVelocity(ego, others, target_lane);
+    bool slow_to_target = false;
 
-    if (targetLaneKinematics.velocity < currentLaneKinematics.velocity)
+    if (target_lane_velocity < current_lane_velocity)
     {
-        size_t indexBehind;
-        double timeBehind;
-        slowToTarget = TryGetVehicleBehind(ego, others, currentLane, indexBehind, timeBehind) && (timeBehind > 3);
+        size_t index;
+        double time_behind;
+        slow_to_target = TryGetVehicleBehind(ego, others, current_lane, index, time_behind) && (time_behind > 3);
     }
 
-    return Vehicle(
-        _highwayParams,
-        slowToTarget ? targetLaneKinematics : currentLaneKinematics,
-        ego.LateralPosition(),
-        ego.Time() + timeStep);
+    return {
+        .is_valid = true,
+        .goal_velocity = slow_to_target ? target_lane_velocity : current_lane_velocity,
+        .goal_lateral_position = LaneCenter(GetLane(ego))
+    };
 }
 
 // Vehicle EgoVehicle::LaneChangeTrajectory(
@@ -310,62 +361,74 @@ Vehicle BehaviorPlanner::PrepareLaneChangeTrajectory(
 //         moveLeft ? (_lateralPos - laneWidth) : (_lateralPos + laneWidth));
 // }
 
-Vehicle BehaviorPlanner::LaneChangeTrajectory(
+// Vehicle BehaviorPlanner::LaneChangeTrajectory(
+//     const Vehicle &ego,
+//     const vector<Vehicle> &others,
+//     bool moveLeft) const
+// {
+//     size_t targetLane = moveLeft ? (ego.Lane() - 1) : (ego.Lane() + 1);
+//     Kinematics targetLaneKinematics = GetLaneKinematics(ego, others, targetLane, timeStep);
+
+//     size_t indexAhead, indexBehind;
+//     double timeAhead, timeBehind;
+
+//     // TODO: parameterize "potential collision" time margin
+//     // TODO: distinguish between acceptable time ahead & time behind?
+
+//     // detect collision with car ahead in target lane
+//     if (TryGetVehicleAhead(ego, others, targetLane, indexAhead, timeAhead) && (timeAhead < 1.5))
+//     {
+//         return Vehicle();
+//     }
+
+//     // detect collision with car behind in target lane
+//     if (TryGetVehicleBehind(ego, others, targetLane, indexBehind, timeBehind) && (timeBehind < 1.5))
+//     {
+//         return Vehicle();
+//     }
+
+//     // no collisions detected --> safe to move into target lane
+//     double laneWidth = _highwayParams.LaneWidth;
+
+//     return Vehicle(
+//         _highwayParams, 
+//         targetLaneKinematics, 
+//         moveLeft ? (ego.LaneCenter() - laneWidth) : (ego.LaneCenter() + laneWidth),
+//         ego.Time() + timeStep);
+// }
+
+BehaviorPlanner::Trajectory BehaviorPlanner::LaneChangeTrajectory(
     const Vehicle &ego,
     const vector<Vehicle> &others,
-    bool moveLeft) const
+    bool change_left) const
 {
-    size_t targetLane = moveLeft ? (ego.Lane() - 1) : (ego.Lane() + 1);
-    Kinematics targetLaneKinematics = GetLaneKinematics(ego, others, targetLane, timeStep);
+    size_t current_lane = GetLane(ego);
+    size_t target_lane = change_left ? (current_lane - 1) : (current_lane + 1);
 
-    size_t indexAhead, indexBehind;
-    double timeAhead, timeBehind;
+    size_t index;
+    double time_ahead, time_behind;
 
     // TODO: parameterize "potential collision" time margin
     // TODO: distinguish between acceptable time ahead & time behind?
 
     // detect collision with car ahead in target lane
-    if (TryGetVehicleAhead(ego, others, targetLane, indexAhead, timeAhead) && (timeAhead < 1.5))
+    if (TryGetVehicleAhead(ego, others, target_lane, index, time_ahead) && (time_ahead < 1.5))
     {
-        return Vehicle();
+        return Trajectory { .is_valid = false };
     }
-    // {
-    //     Vehicle vehAheadPred = others[indexAhead].Predict(timeStep);
-    //     double dist = fabs(targetLaneKinematics.position - vehAheadPred.GetLongitudinalPosition());
-    //     double speed = max(targetLaneKinematics.velocity, vehAheadPred.GetLongitudinalVelocity());
-    //     double gapTime = dist / speed;
-
-    //     // TODO: parameterize acceptable lane-change gap
-    //     // TODO: distinguish between acceptable gap ahead and gap behind?
-    //     if (gapTime < 1.5)
-    //         return Vehicle();
-    // }
 
     // detect collision with car behind in target lane
-    if (TryGetVehicleBehind(ego, others, targetLane, indexBehind, timeBehind) && (timeBehind < 1.5))
+    if (TryGetVehicleBehind(ego, others, target_lane, index, time_behind) && (time_behind < 1.5))
     {
-        return Vehicle();
+        return Trajectory { .is_valid = false };
     }
-    // {
-    //     Vehicle vehBehindPred = others[indexBehind].Predict(timeStep);
-    //     double dist = fabs(targetLaneKinematics.position - vehBehindPred.GetLongitudinalPosition());
-    //     double speed = max(targetLaneKinematics.velocity, vehBehindPred.GetLongitudinalVelocity());
-    //     double gapTime = dist / speed;
-
-    //     // TODO: parameterize acceptable lane-change gap
-    //     // TODO: distinguish between acceptable gap ahead and gap behind?
-    //     if (gapTime < 1.5)
-    //         return Vehicle();
-    // }
 
     // no collisions detected --> safe to move into target lane
-    double laneWidth = _highwayParams.LaneWidth;
-
-    return Vehicle(
-        _highwayParams, 
-        targetLaneKinematics, 
-        moveLeft ? (ego.LateralPosition() - laneWidth) : (ego.LateralPosition() + laneWidth),
-        ego.Time() + timeStep);
+    return {
+        .is_valid = true,
+        .goal_velocity = GetLaneVelocity(ego, others, target_lane),
+        .goal_lateral_position = LaneCenter(target_lane)
+    };
 }
 
 // Kinematics EgoVehicle::GetKinematicsForLane(
@@ -414,75 +477,101 @@ Vehicle BehaviorPlanner::LaneChangeTrajectory(
 //     return accelKin.Predict(1.0);
 // }
 
-Kinematics BehaviorPlanner::GetLaneKinematics(
+// Kinematics BehaviorPlanner::GetLaneKinematics(
+//     const Vehicle &ego,
+//     const vector<Vehicle> &others,
+//     size_t lane,
+//     double dt) const
+// {
+//     double egoPos = ego.Position();
+//     double egoVel = ego.Velocity();
+//     double egoAcc = ego.Acceleration();
+
+//     size_t indexAhead, indexBehind;
+//     double timeAhead, timeBehind;
+//     bool haveAhead = TryGetVehicleAhead(ego, others, lane, indexAhead, timeAhead);
+//     bool haveBehind = TryGetVehicleBehind(ego, others, lane, indexBehind, timeBehind);
+
+//     double newAccel = 0;
+
+//     if (haveAhead && haveBehind && (timeAhead < 2) && (timeBehind < 2))
+//     {
+//         // boxed in, accelerate to match speed of vehicle ahead
+//         newAccel = (others[indexAhead].Velocity() - egoVel) / dt;
+//         cout << "boxed in" << endl;
+//     }
+//     else
+//     {
+//         // by default accelerate to reach target velocity
+//         double targetVelocity = _highwayParams.SpeedLimit - _drivingParams.SpeedLimitBuffer;
+//         double accelToTargetVelocity = (targetVelocity - egoVel) / dt;
+//         double accelToSafeDistance = numeric_limits<double>::max();
+
+//         // maintain safe distance behind vehicle ahead of us
+//         if (haveAhead && (timeAhead < 3)) 
+//         {
+//             const Vehicle &vehAhead = others[indexAhead];
+//             double vehPos = vehAhead.Position();
+//             double vehVel = vehAhead.Velocity();
+//             double vehAcc = vehAhead.Acceleration();
+//             double B = _drivingParams.FollowBuffer;
+//             accelToSafeDistance = ((vehPos + vehVel*dt + 0.5*vehAcc*dt*dt) - (egoPos + egoVel*dt) - B) * 2 / (dt*dt);
+//             cout << "maintain safe distance" << endl;
+//         }
+
+//         newAccel = min(accelToTargetVelocity, accelToSafeDistance);
+//     }
+
+//     // enforce acceleration & jerk limits
+//     double Amax = _drivingParams.AccelerationLimit;
+//     double Jmax = _drivingParams.JerkLimit;
+//     newAccel = clamp(newAccel, -Amax, Amax);
+//     //newAccel = clamp(newAccel, egoAcc - Jmax*dt, egoAcc + Jmax*dt);
+
+//     Kinematics newKin(egoPos, egoVel, newAccel);
+//     return newKin.Predict(dt);
+// }
+
+double BehaviorPlanner::GetLaneVelocity(
     const Vehicle &ego,
     const vector<Vehicle> &others,
-    size_t lane,
-    double dt) const
+    size_t lane) const
 {
-    double egoPos = ego.Position();
-    double egoVel = ego.Velocity();
-    double egoAcc = ego.Acceleration();
-
     size_t indexAhead, indexBehind;
     double timeAhead, timeBehind;
     bool haveAhead = TryGetVehicleAhead(ego, others, lane, indexAhead, timeAhead);
     bool haveBehind = TryGetVehicleBehind(ego, others, lane, indexBehind, timeBehind);
-
-    double newAccel = 0;
+    double lane_velocity = _highwayParams.SpeedLimit - _drivingParams.SpeedLimitBuffer;
 
     if (haveAhead && haveBehind && (timeAhead < 2) && (timeBehind < 2))
     {
         // boxed in, accelerate to match speed of vehicle ahead
-        newAccel = (others[indexAhead].Velocity() - egoVel) / dt;
+        lane_velocity = others[indexAhead].Velocity();
         cout << "boxed in" << endl;
     }
-    else
+    else if (haveAhead && (timeAhead < 3))
     {
-        // by default accelerate to reach target velocity
-        double targetVelocity = _highwayParams.SpeedLimit - _drivingParams.SpeedLimitBuffer;
-        double accelToTargetVelocity = (targetVelocity - egoVel) / dt;
-        double accelToSafeDistance = numeric_limits<double>::max();
-
-        // maintain safe distance behind vehicle ahead of us
-        if (haveAhead && (timeAhead < 3)) 
-        {
-            const Vehicle &vehAhead = others[indexAhead];
-            double vehPos = vehAhead.Position();
-            double vehVel = vehAhead.Velocity();
-            double vehAcc = vehAhead.Acceleration();
-            double B = _drivingParams.FollowBuffer;
-            accelToSafeDistance = ((vehPos + vehVel*dt + 0.5*vehAcc*dt*dt) - (egoPos + egoVel*dt) - B) * 2 / (dt*dt);
-            cout << "maintain safe distance" << endl;
-        }
-
-        newAccel = min(accelToTargetVelocity, accelToSafeDistance);
+        lane_velocity = min(lane_velocity, others[indexAhead].Velocity());
+        cout << "maintain safe distance" << endl;
     }
 
-    // enforce acceleration & jerk limits
-    double Amax = _drivingParams.AccelerationLimit;
-    double Jmax = _drivingParams.JerkLimit;
-    newAccel = clamp(newAccel, -Amax, Amax);
-    //newAccel = clamp(newAccel, egoAcc - Jmax*dt, egoAcc + Jmax*dt);
-
-    Kinematics newKin(egoPos, egoVel, newAccel);
-    return newKin.Predict(dt);
+    return lane_velocity;
 }
 
 bool BehaviorPlanner::TryGetVehicleAhead(
     const Vehicle &ego,
     const vector<Vehicle> &others,
     size_t lane, 
-    size_t &indexAhead,
-    double &timeAhead) const
+    size_t &index,
+    double &time_ahead) const
 {
     const bool LOOK_AHEAD = true;
 
-    if (!TryGetNearestVehicle(ego, others, lane, LOOK_AHEAD, indexAhead))
+    if (!TryGetNearestVehicle(ego, others, lane, LOOK_AHEAD, index))
         return false;
 
-    const Vehicle &vehAhead = others[indexAhead];
-    timeAhead = ego.DistanceBehind(vehAhead) / ego.Velocity();
+    const Vehicle &ahead = others[index];
+    time_ahead = DistanceBehind(ego, ahead) / ego.Velocity();
     return true;
 }
 
@@ -490,41 +579,42 @@ bool BehaviorPlanner::TryGetVehicleBehind(
     const Vehicle &ego,
     const vector<Vehicle> &others,
     size_t lane, 
-    size_t &indexBehind,
-    double &timeBehind) const
+    size_t &index,
+    double &time_behind) const
 {
     const bool LOOK_BEHIND = false;
 
-    if (!TryGetNearestVehicle(ego, others, lane, LOOK_BEHIND, indexBehind))
+    if (!TryGetNearestVehicle(ego, others, lane, LOOK_BEHIND, index))
         return false;
 
-    const Vehicle &vehBehind = others[indexBehind];
-    timeBehind = vehBehind.DistanceBehind(ego) / vehBehind.Velocity();
+    const Vehicle &behind = others[index];
+    time_behind = DistanceBehind(behind, ego) / behind.Velocity();
+    return true;
 }
 
 bool BehaviorPlanner::TryGetNearestVehicle(
     const Vehicle &ego,
     const vector<Vehicle> &others,
     size_t lane, 
-    bool lookAhead,
-    size_t &vehicleIndex) const
+    bool look_ahead,
+    size_t &index) const
 {
-    double nearestDist = numeric_limits<double>::max();
+    double nearest_dist = numeric_limits<double>::max();
     bool found = false;
 
     for (size_t i=0; i < others.size(); i++)
     {
         const Vehicle &other = others[i];
 
-        if (other.Lane() == lane)
+        if (GetLane(other) == lane)
         {
-            double dist = lookAhead ? ego.DistanceBehind(other) : other.DistanceBehind(ego);
+            double dist = look_ahead ? DistanceBehind(ego, other) : DistanceBehind(other, ego);
 
-            if (dist < nearestDist)
+            if (dist < nearest_dist)
             {
                 found = true;
-                vehicleIndex = i;
-                nearestDist = dist;
+                index = i;
+                nearest_dist = dist;
             }
         }
     }
@@ -569,34 +659,77 @@ bool BehaviorPlanner::TryGetNearestVehicle(
 //     return (costIntended + costFinal) / 2.0;
 // }
 
+// double BehaviorPlanner::TrajectoryCost(
+//     const Vehicle &ego, 
+//     const Vehicle &next, 
+//     const vector<Vehicle> &others,
+//     Behavior behavior) const
+// {
+//     size_t intendedLane = ego.Lane();
+//     size_t finalLane = next.Lane();
+//     double dt = next.Time() - ego.Time();
+
+//     if (behavior == PrepareLaneChangeLeft || behavior == LaneChangeLeft) {
+//         intendedLane--;
+//     }
+//     else if (behavior == PrepareLaneChangeRight || behavior == LaneChangeRight) {
+//         intendedLane++;
+//     }
+
+//     double intendedSpeed = GetLaneKinematics(ego, others, intendedLane, dt).velocity;
+//     double finalSpeed = GetLaneKinematics(ego, others, finalLane, dt).velocity;
+
+//     double costIntended = SpeedCost(intendedSpeed);
+//     double costFinal = SpeedCost(finalSpeed);
+
+//     cout << BehaviorLabel(behavior) << endl;
+//     cout << " intended speed: " << intendedSpeed << ", cost: " << costIntended << endl;
+//     cout << " final speed: " << finalSpeed << ", cost: " << costFinal << endl;
+
+//     // if (costIntended == 1.0 || costFinal == 1.0)
+//     //     return 1.0;
+
+//     //return (costIntended + costFinal) / 2.0;
+//     return (costIntended + costFinal);
+// }
+
 double BehaviorPlanner::TrajectoryCost(
     const Vehicle &ego, 
-    const Vehicle &next, 
     const vector<Vehicle> &others,
-    Behavior behavior) const
+    Behavior behavior,
+    Trajectory traj) const
 {
-    size_t intendedLane = ego.Lane();
-    size_t finalLane = next.Lane();
-    double dt = next.Time() - ego.Time();
+    const double weight_intended_speed = 1.5;
+    const double weight_final_speed = 1.0;
+    const double weight_lane_change = 0.1;
 
-    if (behavior == PrepareLaneChangeLeft || behavior == LaneChangeLeft) {
-        intendedLane--;
-    }
-    else if (behavior == PrepareLaneChangeRight || behavior == LaneChangeRight) {
-        intendedLane++;
-    }
+    bool change_left = (behavior == PrepareLaneChangeLeft || behavior == LaneChangeLeft);
+    bool change_right = (behavior == PrepareLaneChangeRight || behavior == LaneChangeRight);
+    int lane_change_offs = change_left ? -1 : (change_right ? 1 : 0);
+    double lane_change_cost = fabs(lane_change_offs);
 
-    double intendedSpeed = GetLaneKinematics(ego, others, intendedLane, dt).velocity;
-    double finalSpeed = GetLaneKinematics(ego, others, finalLane, dt).velocity;
+    size_t intended_lane = _highwayParams.WhichLane(ego.LateralPosition()) + lane_change_offs;
+    double intended_speed = GetLaneVelocity(ego, others, intended_lane);
+    double intended_speed_cost = SpeedCost(intended_speed);
 
-    double costIntended = SpeedCost(intendedSpeed);
-    double costFinal = SpeedCost(finalSpeed);
+    size_t final_lane = _highwayParams.WhichLane(traj.goal_lateral_position);
+    double final_speed = GetLaneVelocity(ego, others, final_lane);
+    double final_speed_cost = SpeedCost(final_speed);
+
+
+    cout << BehaviorLabel(behavior) << endl;
+    cout << " intended lane speed: " << intended_speed << ", cost: " << intended_speed_cost << endl;
+    cout << " final lane speed: " << final_speed << ", cost: " << final_speed_cost << endl;
 
     // if (costIntended == 1.0 || costFinal == 1.0)
     //     return 1.0;
 
     //return (costIntended + costFinal) / 2.0;
-    return (costIntended + costFinal);
+    // return (cost_intended + cost_final);
+    return 
+        (weight_intended_speed * intended_speed_cost) +
+        (weight_final_speed * final_speed_cost) +
+        (weight_lane_change * lane_change_cost);
 }
 
 double BehaviorPlanner::SpeedCost(double speed) const 

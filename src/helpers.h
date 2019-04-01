@@ -35,6 +35,10 @@ inline double distance(double x1, double y1, double x2, double y2)
     return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
 }
 
+inline double lerp(double x1, double x2, double t) {
+    return (1-t)*x1 + t*x2;
+}
+
 // // Calculate closest waypoint to current x, y position
 // int ClosestWaypoint(
 //     double x, 
@@ -193,7 +197,16 @@ struct Vector2D
     static Vector2D Polar(double angle);
     static double Dot(Vector2D u, Vector2D v);
     static double PerpDot(Vector2D u, Vector2D v);
+    double Dot(Vector2D) const;
+    double PerpDot(Vector2D) const;
     Vector2D Perp() const;
+    static Vector2D Lerp(Vector2D u, Vector2D v, double t);
+};
+
+struct Pose2D
+{
+    Vector2D location;
+    Vector2D direction;
 };
 
 // vector negation

@@ -15,17 +15,93 @@ struct DrivingParameters
     double StopCost;
 };
 
+// class BehaviorPlanner
+// {
+// public:
+//     BehaviorPlanner(const DrivingParameters&, const HighwayParameters&);
+
+//     Vehicle Update(const Vehicle &ego, const std::vector<Vehicle> &others);
+
+//     enum Behavior 
+//     {
+//         KeepLane,
+//         PrepareLaneChangeLeft,
+//         PrepareLaneChangeRight,
+//         LaneChangeLeft,
+//         LaneChangeRight
+//     };
+
+//     bool IsChangingLanes() const;
+//     Behavior CurrentBehavior() const;
+
+//     static std::string BehaviorLabel(Behavior);
+
+// private:
+//     std::vector<Behavior> SuccessorBehaviors(const Vehicle &ego) const;
+
+//     Vehicle GenerateTrajectory(
+//         const Vehicle &ego, 
+//         const std::vector<Vehicle> &others, 
+//         Behavior) const;
+
+//     Vehicle KeepLaneTrajectory(
+//         const Vehicle &ego, 
+//         const std::vector<Vehicle> &others) const;
+    
+//     Vehicle PrepareLaneChangeTrajectory(
+//         const Vehicle &ego, 
+//         const std::vector<Vehicle> &others, 
+//         bool moveLeft) const;
+
+//     Vehicle LaneChangeTrajectory(
+//         const Vehicle &ego, 
+//         const std::vector<Vehicle> &others, 
+//         bool moveLeft) const;
+
+//     Kinematics GetLaneKinematics(
+//         const Vehicle &ego, 
+//         const std::vector<Vehicle> &others, 
+//         size_t lane, 
+//         double dt) const;
+
+//     bool TryGetVehicleAhead(
+//         const Vehicle &ego, 
+//         const std::vector<Vehicle> &others, 
+//         size_t lane, 
+//         size_t &indexAhead,
+//         double &timeAhead) const;
+
+//     bool TryGetVehicleBehind(
+//         const Vehicle &ego, 
+//         const std::vector<Vehicle> &others, 
+//         size_t lane, 
+//         size_t &indexBehind,
+//         double &timeBehind) const;
+
+//     bool TryGetNearestVehicle(
+//         const Vehicle &ego, 
+//         const std::vector<Vehicle> &others, 
+//         size_t lane, 
+//         bool lookAhead, 
+//         size_t &vehicleIndex) const;
+
+//     double TrajectoryCost(
+//         const Vehicle &ego,
+//         const Vehicle &next,
+//         const std::vector<Vehicle> &others,
+//         Behavior) const;
+
+//     double SpeedCost(double speed) const;
+
+//     DrivingParameters _drivingParams;
+//     HighwayParameters _highwayParams;
+//     Behavior _currentBehavior;
+// };
+
 class BehaviorPlanner
 {
 public:
     BehaviorPlanner(const DrivingParameters&, const HighwayParameters&);
-
-    // void Update(
-    //     const VehiclePredictions&, 
-    //     const Vehicle &egoStart,
-    //     Vehicle &egoFinish,
-    //     double &trajTime);
-    Vehicle Update(const Vehicle &ego, const std::vector<Vehicle> &others);
 
     enum Behavior 
     {
@@ -36,63 +112,52 @@ public:
         LaneChangeRight
     };
 
-    bool IsChangingLanes() const;
+    struct Trajectory
+    {
+        bool is_valid;
+        double goal_velocity;
+        double goal_lateral_position;
+    };
+
+    Trajectory Update(const Vehicle &ego, const std::vector<Vehicle> &others);
+
     Behavior CurrentBehavior() const;
+    bool IsChangingLanes() const;
 
     static std::string BehaviorLabel(Behavior);
 
 private:
     std::vector<Behavior> SuccessorBehaviors(const Vehicle &ego) const;
-    //Vehicle GenerateTrajectory(Behavior, const VehiclePredictions&, double dt) const;
-    Vehicle GenerateTrajectory(
+
+    Trajectory GenerateTrajectory(
         const Vehicle &ego, 
         const std::vector<Vehicle> &others, 
         Behavior) const;
 
-    // Vehicle ConstantSpeedTrajectory(const VehiclePredictions&, double dt) const;
-    // Vehicle KeepLaneTrajectory(const VehiclePredictions&, double dt) const;
-    // Vehicle PrepareLaneChangeTrajectory(bool left, const VehiclePredictions&, double dt) const;
-    // Vehicle LaneChangeTrajectory(bool left, const VehiclePredictions&, double dt) const;
-    Vehicle KeepLaneTrajectory(
+    Trajectory KeepLaneTrajectory(
         const Vehicle &ego, 
         const std::vector<Vehicle> &others) const;
     
-    Vehicle PrepareLaneChangeTrajectory(
+    Trajectory PrepareLaneChangeTrajectory(
         const Vehicle &ego, 
         const std::vector<Vehicle> &others, 
         bool moveLeft) const;
 
-    Vehicle LaneChangeTrajectory(
+    Trajectory LaneChangeTrajectory(
         const Vehicle &ego, 
         const std::vector<Vehicle> &others, 
         bool moveLeft) const;
 
-    //Kinematics GetKinematicsForLane(const VehiclePredictions&, size_t lane, double dt) const;
     Kinematics GetLaneKinematics(
         const Vehicle &ego, 
         const std::vector<Vehicle> &others, 
         size_t lane, 
         double dt) const;
-    //Vehicle GetNearestVehicleInLane(size_t lane, bool lookAhead, const VehiclePredictions&) const;
 
-    // bool TryGetVehicleAhead(
-    //     const VehiclePredictions&, 
-    //     const Vehicle &ego,
-    //     size_t lane, 
-    //     size_t &ID) const;
-
-    // bool TryGetVehicleBehind(
-    //     const VehiclePredictions&, 
-    //     const Vehicle &ego,
-    //     size_t lane, 
-    //     size_t &ID) const;
-
-    // bool TryGetNearestVehicle(
-    //     const VehiclePredictions&,
-    //     const Vehicle &ego,
-    //     bool lookAhead,
-    //     size_t lane,
-    //     size_t &ID) const;
+    double GetLaneVelocity(
+        const Vehicle &ego, 
+        const std::vector<Vehicle> &others, 
+        size_t lane) const;
 
     bool TryGetVehicleAhead(
         const Vehicle &ego, 
@@ -115,15 +180,18 @@ private:
         bool lookAhead, 
         size_t &vehicleIndex) const;
 
-    //double TrajectoryCost(const VehicleTrajectory&, const VehiclePredictions&) const;
-    //double EfficiencyCost(double velocity) const;
     double TrajectoryCost(
         const Vehicle &ego,
-        const Vehicle &next,
         const std::vector<Vehicle> &others,
-        Behavior) const;
+        Behavior,
+        Trajectory) const;
 
     double SpeedCost(double speed) const;
+    size_t GetLane(const Vehicle&) const;
+    double LaneCenter(size_t lane) const;
+    
+    // how far behind other vehicle am I? (normalized for track wrap-around)
+    double DistanceBehind(const Vehicle &behind, const Vehicle &ahead) const;
 
     DrivingParameters _drivingParams;
     HighwayParameters _highwayParams;

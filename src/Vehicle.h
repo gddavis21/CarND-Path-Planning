@@ -11,40 +11,63 @@
 // class Vehicle;
 // typedef std::shared_ptr<Vehicle> VehiclePtr;
 
+// class Vehicle
+// {
+// public:
+//     Vehicle(
+//         const HighwayParameters &hwyParams, 
+//         const Kinematics &longKinematics, 
+//         double lateralPos, 
+//         double time);
+
+//     Vehicle();
+
+//     bool IsValid() const;
+//     double Time() const;
+
+//     Kinematics GetKinematics() const;
+
+//     double Position() const;
+//     double Velocity() const;
+//     double Acceleration() const;
+
+//     double LateralPosition() const;
+//     size_t Lane() const;
+//     double LaneCenter() const;
+
+//     Vehicle Predict(double dt) const;
+
+//     // how far behind other vehicle am I? (normalized for track wrap-around)
+//     double DistanceBehind(const Vehicle &other) const;
+
+// protected:
+//     bool _valid;
+//     HighwayParameters _hwyParams;
+//     Kinematics _longKinematics;
+//     double _lateralPos;
+//     double _time;
+// };
+
 class Vehicle
 {
 public:
-    Vehicle(
-        const HighwayParameters &hwyParams, 
-        const Kinematics &longKinematics, 
-        double lateralPos, 
-        double time);
-
-    Vehicle();
-
-    bool IsValid() const;
-    double Time() const;
-
-    Kinematics GetKinematics() const;
+    Vehicle(double position, double velocity, double lateral_position);
 
     double Position() const;
     double Velocity() const;
-    double Acceleration() const;
-
     double LateralPosition() const;
-    size_t Lane() const;
+    // size_t Lane() const;
+    // double LaneCenter() const;
 
     Vehicle Predict(double dt) const;
 
     // how far behind other vehicle am I? (normalized for track wrap-around)
-    double DistanceBehind(const Vehicle &other) const;
+    //double DistanceBehind(const Vehicle &other) const;
 
 protected:
-    bool _valid;
-    HighwayParameters _hwyParams;
-    Kinematics _longKinematics;
-    double _lateralPos;
-    double _time;
+    double _position;
+    double _velocity;
+    double _lateral;
 };
 
 // typedef std::array<Vehicle, 2> VehicleTrajectory;
@@ -173,36 +196,52 @@ protected:
 //     Behavior _currentBehavior;
 // };
 
-inline bool Vehicle::IsValid() const {
-    return _valid;
-}
+// inline bool Vehicle::IsValid() const {
+//     return _valid;
+// }
 
-inline double Vehicle::Time() const {
-    return _time;
-}
+// inline double Vehicle::Time() const {
+//     return _time;
+// }
 
-inline Kinematics Vehicle::GetKinematics() const {
-    return _longKinematics;
-}
+// inline Kinematics Vehicle::GetKinematics() const {
+//     return _longKinematics;
+// }
+
+// inline double Vehicle::Position() const {
+//     return _longKinematics.position;
+// }
+
+// inline double Vehicle::Velocity() const {
+//     return _longKinematics.velocity;
+// }
+
+// inline double Vehicle::Acceleration() const {
+//     return _longKinematics.acceleration;
+// }
+
+// inline double Vehicle::LateralPosition() const {
+//     return _lateralPos;
+// }
+
+// inline size_t Vehicle::Lane() const {
+//     return _hwyParams.WhichLane(_lateralPos);
+// }
+
+// inline double Vehicle::LaneCenter() const {
+//     return Lane()*_hwyParams.LaneWidth + _hwyParams.LaneWidth/2;
+// }
 
 inline double Vehicle::Position() const {
-    return _longKinematics.position;
+    return _position;
 }
 
 inline double Vehicle::Velocity() const {
-    return _longKinematics.velocity;
-}
-
-inline double Vehicle::Acceleration() const {
-    return _longKinematics.acceleration;
+    return _velocity;
 }
 
 inline double Vehicle::LateralPosition() const {
-    return _lateralPos;
-}
-
-inline size_t Vehicle::Lane() const {
-    return _hwyParams.WhichLane(_lateralPos);
+    return _lateral;
 }
 
 #endif // __VEHICLE_H__

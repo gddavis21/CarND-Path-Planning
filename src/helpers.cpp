@@ -101,6 +101,19 @@ double Vector2D::PerpDot(Vector2D u, Vector2D v) {
     return u.x*v.y - u.y*v.x;
 }
 
+double Vector2D::Dot(Vector2D that) const {
+    return Vector2D::Dot(*this, that);
+}
+
+double Vector2D::PerpDot(Vector2D that) const {
+    return Vector2D::PerpDot(*this, that);
+}
+
 Vector2D Vector2D::Perp() const {
     return Vector2D(-y, x);
+}
+
+Vector2D Vector2D::Lerp(Vector2D u, Vector2D v, double t)
+{
+    return (1-t)*u + t*v;
 }

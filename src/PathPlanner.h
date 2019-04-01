@@ -44,6 +44,7 @@ public:
 
 private:
     HighwayParameters _highwayParams;
+    DrivingParameters _drivingParams;
     std::unique_ptr<HighwayCoordinates> _highwayCoords;
     std::unique_ptr<BehaviorPlanner> _behaviorPlanner;
 };

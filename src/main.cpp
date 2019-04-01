@@ -147,10 +147,10 @@ const HighwayParameters HIGHWAY_PARAMS = {
 };
 
 const DrivingParameters DRIVING_PARAMS = {
-    .AccelerationLimit = 9,     // m/s^2
+    .AccelerationLimit = 5,     // m/s^2
     .JerkLimit = 9,             // m/s^3
     .FollowBuffer = 1.5,
-    .SpeedLimitBuffer = mph_to_mps(2),
+    .SpeedLimitBuffer = mph_to_mps(5),
     .StopCost = 0.8
 };
 
