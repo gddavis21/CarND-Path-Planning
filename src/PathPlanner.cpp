@@ -7,10 +7,12 @@ using namespace std;
 PathPlanner::PathPlanner(
     const DrivingParameters &drivingParams,
     const HighwayParameters &highwayParams,
+    const SafetyConstraints &safetyConstraints,
     const vector<HighwayWaypoint> &waypoints)
 {
     _drivingParams = drivingParams;
     _highwayParams = highwayParams;
+    _safetyConstraints = safetyConstraints;
     _highwayCoords.reset(new HighwayCoordinates(highwayParams, waypoints));
     _behaviorPlanner.reset(new BehaviorPlanner(drivingParams, highwayParams));
 }
@@ -235,21 +237,16 @@ vector<Vector2D> PathPlanner::PlanNextPath(
     vector<Vector2D> nextPath;
     //nextPath.reserve(100);
 
-    // if (_behaviorPlanner->IsChangingLanes())
-    // {
-    //     nextPath.insert(nextPath.end(), previousPath.begin(), previousPath.end());
-    // }
-    // else
-    // {
-    //     nextPath.insert(
-    //         nextPath.end(), 
-    //         previousPath.begin(), 
-    //         previousPath.begin() + min<size_t>(previousPath.size(), 50));
-    // }
-    
-    nextPath.insert(nextPath.end(), previousPath.begin(), previousPath.end());
+    vector<Vector2D>::const_iterator prevPathCutoff = previousPath.end();
 
-    if (nextPath.size() >= 35) {
+    if (!_behaviorPlanner->IsChangingLanes())
+    {
+        prevPathCutoff = previousPath.begin() + min<size_t>(previousPath.size(), 50);
+    }
+
+    nextPath.insert(nextPath.end(), previousPath.begin(), prevPathCutoff);
+
+    if (nextPath.size() > 50) {
         return nextPath;
     }
 
@@ -500,7 +497,7 @@ vector<Vector2D> PathPlanner::PlanNextPath(
     // cout << "behavior: " << behavior_label << ", duration: " << dt << endl;
     cout << "behavior: " << behavior_label << endl;
 
-    double vs_fin = traj.goal_velocity;
+    // double vs_fin = traj.goal_velocity;
     double d_fin = traj.goal_lateral_position;
     double dur = 1.0;
     double dt = 0.02;
@@ -508,8 +505,19 @@ vector<Vector2D> PathPlanner::PlanNextPath(
     vector<Vector2D> path;
     path.reserve(100);
 
-    for (;;)
+    while (dur <= 2.0)
     {
+        // double s_fin, d_fin;
+
+        // if (s_kin_ini.velocity == 0)
+        // {
+        //     s_fin = s_kin_ini.position + 
+        // }
+
+        double dv = traj.goal_velocity - s_kin_ini.velocity;
+        double dv_max = _drivingParams.AccelerationLimit * dur;
+        dv = sign(dv) * min(fabs(dv), dv_max);
+        double vs_fin = s_kin_ini.velocity + dv;
         double s_fin = s_kin_ini.position + 0.5*(s_kin_ini.velocity + vs_fin)*dur;
         Frenet2D hwy_fin = { .s = s_fin, .d = d_fin};
         Pose2D pose_fin = _highwayCoords->HighwayToMap(hwy_fin);
@@ -543,13 +551,13 @@ vector<Vector2D> PathPlanner::PlanNextPath(
             Vector2D v = (1/dt)*(p - p0);
             Vector2D a = (1/dt)*(v - v0);
 
-            // if (v.Length() > _highwayParams.SpeedLimit)
-            // {
-            //     violation = true;
-            //     break;
-            // }
+            if (v.Length() > _safetyConstraints.SpeedLimit)
+            {
+                violation = true;
+                break;
+            }
 
-            if (a.Length() > _drivingParams.AccelerationLimit)
+            if (a.Length() > _safetyConstraints.AccelerationLimit)
             {
                 violation = true;
                 break;
@@ -570,8 +578,8 @@ vector<Vector2D> PathPlanner::PlanNextPath(
             break;
         }
 
-        dur += 0.25;
         path.clear();
+        dur += 0.25;
     }
 
     // double A = (vs_fin - vs_ini) / M_PI;
@@ -702,7 +710,10 @@ vector<Vector2D> PathPlanner::PlanNextPath(
     // cout << "computing next path from trajectory" << endl;
     // vector<Vector2D> pathMap = _highwayCoords->HighwayToMap(pathHwy);
     //size_t K = _behaviorPlanner->IsChangingLanes() ? path.size() : 50;
-    nextPath.insert(nextPath.end(), path.begin(), path.end());
+    if (path.empty())
+        nextPath.insert(nextPath.end(), prevPathCutoff, previousPath.end());
+    else
+        nextPath.insert(nextPath.end(), path.begin(), path.end());
 
     // cout << "next path" << endl;
     // for (size_t i=0; i < nextPath.size(); i++) {

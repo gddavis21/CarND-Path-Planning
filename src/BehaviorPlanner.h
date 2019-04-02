@@ -164,6 +164,7 @@ private:
         const std::vector<Vehicle> &others, 
         size_t lane, 
         size_t &indexAhead,
+        double &distAhead,
         double &timeAhead) const;
 
     bool TryGetVehicleBehind(
@@ -171,6 +172,7 @@ private:
         const std::vector<Vehicle> &others, 
         size_t lane, 
         size_t &indexBehind,
+        double &distBehind,
         double &timeBehind) const;
 
     bool TryGetNearestVehicle(
@@ -192,6 +194,33 @@ private:
     
     // how far behind other vehicle am I? (normalized for track wrap-around)
     double DistanceBehind(const Vehicle &behind, const Vehicle &ahead) const;
+
+    size_t IntendedLane(const Vehicle &ego, Behavior) const;
+    size_t FinalLane(Trajectory) const;
+
+    double TrafficAheadCost(
+        const Vehicle &ego,
+        const std::vector<Vehicle> &others,
+        Behavior,
+        Trajectory) const;
+    
+    double TrafficBehindCost(
+        const Vehicle &ego,
+        const std::vector<Vehicle> &others,
+        Behavior,
+        Trajectory) const;
+
+    double IntendedLaneSpeedCost(
+        const Vehicle &ego,
+        const std::vector<Vehicle> &others,
+        Behavior,
+        Trajectory) const;
+
+    double FinalLaneSpeedCost(
+        const Vehicle &ego,
+        const std::vector<Vehicle> &others,
+        Behavior,
+        Trajectory) const;
 
     DrivingParameters _drivingParams;
     HighwayParameters _highwayParams;

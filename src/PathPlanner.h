@@ -8,12 +8,20 @@
 #include "Vehicle.h"
 #include "BehaviorPlanner.h"
 
+struct SafetyConstraints
+{
+    double SpeedLimit;
+    double AccelerationLimit;
+    double JerkLimit;
+};
+
 class PathPlanner
 {
 public:
     PathPlanner(
         const DrivingParameters&, 
         const HighwayParameters&, 
+        const SafetyConstraints&,
         const std::vector<HighwayWaypoint>&);
 
     struct EgoVehicleState
@@ -45,6 +53,7 @@ public:
 private:
     HighwayParameters _highwayParams;
     DrivingParameters _drivingParams;
+    SafetyConstraints _safetyConstraints;
     std::unique_ptr<HighwayCoordinates> _highwayCoords;
     std::unique_ptr<BehaviorPlanner> _behaviorPlanner;
 };

@@ -154,11 +154,22 @@ const DrivingParameters DRIVING_PARAMS = {
     .StopCost = 0.8
 };
 
+const SafetyConstraints SAFETY_CONSTRAINTS = {
+    .SpeedLimit = mph_to_mps(49),
+    .AccelerationLimit = 9.9,
+    .JerkLimit = 9.9
+};
+
 const string WAYPOINTS_PATH = "../data/highway_map.csv";
 
 int main() 
 {
-    PathPlanner pathPlanner(DRIVING_PARAMS, HIGHWAY_PARAMS, LoadWaypoints(WAYPOINTS_PATH));
+    PathPlanner pathPlanner(
+        DRIVING_PARAMS, 
+        HIGHWAY_PARAMS, 
+        SAFETY_CONSTRAINTS, 
+        LoadWaypoints(WAYPOINTS_PATH));
+        
     uWS::Hub h;
 
     // h.onMessage([&hwyParams, &drivingParams, &hwyCoords, &egoVehicle](
